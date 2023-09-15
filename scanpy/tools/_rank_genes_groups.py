@@ -399,7 +399,6 @@ class _RankGenes:
 
             if self.comp_pts:
                 self.pts[group_index] = self.pts[group_index][global_indices]
-            # self.stats[group_name, 'pts'] = self.pts[group_index][global_indices]
 
             if pvals is not None:
                 self.stats[group_name, 'pvals'] = pvals[global_indices]
