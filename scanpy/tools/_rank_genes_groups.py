@@ -397,6 +397,10 @@ class _RankGenes:
 
             self.stats[group_name, 'scores'] = scores[global_indices]
 
+            if self.comp_pts:
+                self.pts[group_index] = self.pts[group_index][global_indices]
+            # self.stats[group_name, 'pts'] = self.pts[group_index][global_indices]
+
             if pvals is not None:
                 self.stats[group_name, 'pvals'] = pvals[global_indices]
                 if corr_method == 'benjamini-hochberg':
