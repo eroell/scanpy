@@ -63,6 +63,74 @@ def test_read_10x(tmp_path, mtx_path, h5_path, prefix):
     assert_anndata_equal(sc.read_h5ad(from_mtx_pth), sc.read_h5ad(from_h5_pth))
 
 
+@pytest.mark.parametrize(
+    ['mtx_path', 'h5_path'],
+    [
+        pytest.param(
+            ROOT / '1.2.0' / 'filtered_gene_bc_matrices' / 'hg19_chr21',
+            ROOT / '1.2.0' / 'filtered_gene_bc_matrices_h5.h5',
+        ),
+        pytest.param(
+            ROOT / '3.0.0' / 'filtered_feature_bc_matrix',
+            ROOT / '3.0.0' / 'filtered_feature_bc_matrix.h5',
+        ),
+    ],
+)
+@pytest.mark.parametrize('prefix', [None, "prefix_"])
+def test_read_10x_mtx_args(tmp_path, mtx_path, h5_path, prefix):
+    if prefix is not None:
+        # Build files named "prefix_XXX.xxx" in a temporary directory.
+        mtx_path_orig = mtx_path
+        mtx_path = tmp_path / "filtered_gene_bc_matrices_prefix"
+        mtx_path.mkdir()
+        for item in mtx_path_orig.iterdir():
+            if item.is_file():
+                shutil.copyfile(item, mtx_path / f"{prefix}{item.name}")
+
+    with pytest.raises(ValueError):
+        sc.read_10x_mtx(
+            mtx_path,
+            var_names="gene_symbols",
+            prefix=prefix,
+            matrix_filename="matrix.mtx",
+        )
+        sc.read_10x_mtx(
+            mtx_path,
+            var_names="gene_symbols",
+            prefix=prefix,
+            features_filename="features.tsv",
+        )
+        sc.read_10x_mtx(
+            mtx_path,
+            var_names="gene_symbols",
+            prefix=prefix,
+            barcodes_filename="barcodes.tsv",
+        )
+
+        sc.read_10x_mtx(
+            mtx_path,
+            var_names="gene_symbols",
+            prefix=prefix,
+            matrix_filename="matrix.mtx",
+            features_filename="features.tsv",
+            barcodes_filename="barcodes.tsv.gz",
+        )
+
+    mtx = sc.read_10x_mtx(mtx_path, var_names="gene_symbols", prefix=prefix)
+
+    mtx_2 = sc.read_10x_mtx(
+        mtx_path,
+        var_names="gene_symbols",
+        prefix=prefix,
+        matrix_filename="matrix.mtx",
+        features_filename="genes.tsv",
+        barcodes_filename="barcodes.tsv",
+    )
+
+    assert_anndata_equal(mtx, mtx_2)
+    # TODO: test v2 and v3
+
+
 def test_read_10x_h5_v1():
     spec_genome_v1 = sc.read_10x_h5(
         ROOT / '1.2.0' / 'filtered_gene_bc_matrices_h5.h5',

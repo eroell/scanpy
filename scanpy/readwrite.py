@@ -499,6 +499,10 @@ def read_10x_mtx(
     cache: bool = False,
     cache_compression: Union[Literal['gzip', 'lzf'], None, Empty] = _empty,
     gex_only: bool = True,
+    matrix_filename: str = None,
+    features_filename: str = None,
+    barcodes_filename: str = None,
+    cell_ranger_version: Union[Literal['v2-', 'v3+'], None] = None,
     *,
     prefix: str = None,
 ) -> AnnData:
@@ -523,6 +527,15 @@ def read_10x_mtx(
     gex_only
         Only keep 'Gene Expression' data and ignore other feature types,
         e.g. 'Antibody Capture', 'CRISPR Guide Capture', or 'Custom'
+    matrix_filename
+        Name of the matrix file. (Default: 'matrix.mtx')
+    features_filename
+        Name of the features file. If it is not found, 'features.tsv.gz' will be searched for
+        as fallback to CellRanger v3 or later versions. (Default: 'genes.tsv')
+    barcodes_filename
+        Name of the barcodes file. (Default: 'barcodes.tsv')
+    cell_ranger_version
+        Version of Cell Ranger used. If not specified, it is inferred from the files.
     prefix
         Any prefix before `matrix.mtx`, `genes.tsv` and `barcodes.tsv`. For instance,
         if the files are named `patientA_matrix.mtx`, `patientA_genes.tsv` and
@@ -535,14 +548,51 @@ def read_10x_mtx(
     """
     path = Path(path)
     prefix = "" if prefix is None else prefix
-    genefile_exists = (path / f'{prefix}genes.tsv').is_file()
-    read = _read_legacy_10x_mtx if genefile_exists else _read_v3_10x_mtx
+
+    _check_filenames(matrix_filename, features_filename, barcodes_filename)
+
+    if features_filename is not None:
+        genefile_exists = (path / f'{prefix}{features_filename}').is_file()
+        if not genefile_exists:
+            raise FileNotFoundError(f'Could not find {features_filename}')
+    else:
+        genefile_exists = (path / f'{prefix}genes.tsv').is_file()
+
+    # if the features file is specified, v2- or v3+ inferred from file ending
+    if cell_ranger_version is None:
+        if features_filename is None:
+            cell_ranger_version = (
+                'v2-' if (path / f'{prefix}genes.tsv').is_file() else 'v3+'
+            )
+        if features_filename is not None:
+            cell_ranger_version = 'v2-' if features_filename.endswith('.gz') else 'v3+'
+
+    if cell_ranger_version == 'v2-':
+        mtx_fl = 'matrix.mtx' if matrix_filename is None else matrix_filename
+        feat_fl = 'genes.tsv' if features_filename is None else features_filename
+        barcd_fl = 'barcodes.tsv' if barcodes_filename is None else barcodes_filename
+        read = _read_legacy_10x_mtx
+
+    elif cell_ranger_version == 'v3+':
+        mtx_fl = 'matrix.mtx.gz' if matrix_filename is None else matrix_filename
+        feat_fl = 'features.tsv.gz' if features_filename is None else features_filename
+        barcd_fl = 'barcodes.tsv.gz' if barcodes_filename is None else barcodes_filename
+        read = _read_v3_10x_mtx
+
+    else:
+        raise ValueError(
+            f'cell_ranger_version must be "v2-" or "v3+", not {cell_ranger_version}'
+        )
+
     adata = read(
         str(path),
         var_names=var_names,
         make_unique=make_unique,
         cache=cache,
         cache_compression=cache_compression,
+        matrix_filename=mtx_fl,
+        features_filename=feat_fl,
+        barcodes_filename=barcd_fl,
         prefix=prefix,
     )
     if genefile_exists or not gex_only:
@@ -560,6 +610,9 @@ def _read_legacy_10x_mtx(
     make_unique=True,
     cache=False,
     cache_compression=_empty,
+    matrix_filename=None,
+    features_filename=None,
+    barcodes_filename=None,
     *,
     prefix="",
 ):
@@ -568,11 +621,11 @@ def _read_legacy_10x_mtx(
     """
     path = Path(path)
     adata = read(
-        path / f'{prefix}matrix.mtx',
+        path / f'{prefix}{matrix_filename}',
         cache=cache,
         cache_compression=cache_compression,
     ).T  # transpose the data
-    genes = pd.read_csv(path / f'{prefix}genes.tsv', header=None, sep='\t')
+    genes = pd.read_csv(path / f'{prefix}{features_filename}', header=None, sep='\t')
     if var_names == 'gene_symbols':
         var_names = genes[1].values
         if make_unique:
@@ -584,7 +637,9 @@ def _read_legacy_10x_mtx(
         adata.var['gene_symbols'] = genes[1].values
     else:
         raise ValueError("`var_names` needs to be 'gene_symbols' or 'gene_ids'")
-    adata.obs_names = pd.read_csv(path / f'{prefix}barcodes.tsv', header=None)[0].values
+    adata.obs_names = pd.read_csv(path / f'{prefix}{barcodes_filename}', header=None)[
+        0
+    ].values
     return adata
 
 
@@ -594,6 +649,9 @@ def _read_v3_10x_mtx(
     make_unique=True,
     cache=False,
     cache_compression=_empty,
+    matrix_filename=None,
+    features_filename=None,
+    barcodes_filename=None,
     *,
     prefix="",
 ):
@@ -602,11 +660,11 @@ def _read_v3_10x_mtx(
     """
     path = Path(path)
     adata = read(
-        path / f'{prefix}matrix.mtx.gz',
+        path / f'{prefix}{matrix_filename}',
         cache=cache,
         cache_compression=cache_compression,
     ).T  # transpose the data
-    genes = pd.read_csv(path / f'{prefix}features.tsv.gz', header=None, sep='\t')
+    genes = pd.read_csv(path / f'{prefix}{features_filename}', header=None, sep='\t')
     if var_names == 'gene_symbols':
         var_names = genes[1].values
         if make_unique:
@@ -619,10 +677,41 @@ def _read_v3_10x_mtx(
     else:
         raise ValueError("`var_names` needs to be 'gene_symbols' or 'gene_ids'")
     adata.var['feature_types'] = genes[2].values
-    adata.obs_names = pd.read_csv(path / f'{prefix}barcodes.tsv.gz', header=None)[
+    adata.obs_names = pd.read_csv(path / f'{prefix}{barcodes_filename}', header=None)[
         0
     ].values
     return adata
+
+
+def _check_filenames(matrix_filename, features_filename, barcodes_filename):
+    # Check if either all filenames are None or all are specified as strings
+    if not all(
+        x is None for x in [matrix_filename, features_filename, barcodes_filename]
+    ) and not all(
+        isinstance(x, str)
+        for x in [matrix_filename, features_filename, barcodes_filename]
+    ):
+        raise ValueError(
+            "Either all filenames must be None or all must be specified as strings."
+        )
+
+    # Check if all filenames are specified, then check if they all end with .gz or none of them do
+    if all(
+        x is not None for x in [matrix_filename, features_filename, barcodes_filename]
+    ):
+        all_end_in_gz = all(
+            x.endswith('.gz')
+            for x in [matrix_filename, features_filename, barcodes_filename]
+        )
+        no_end_in_gz = all(
+            not x.endswith('.gz')
+            for x in [matrix_filename, features_filename, barcodes_filename]
+        )
+        if not (all_end_in_gz or no_end_in_gz):
+            raise ValueError(
+                f"If all filenames are specified, either all must end with .gz or none of them should: \
+                {all( not x.endswith('.gz') for x in [matrix_filename, features_filename, barcodes_filename] )} {matrix_filename, features_filename, barcodes_filename}"
+            )
 
 
 def write(
