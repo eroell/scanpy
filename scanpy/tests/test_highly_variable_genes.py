@@ -365,8 +365,8 @@ def test_highly_variable_genes_compare_to_seurat_v3():
     pbmc_dense = pbmc.copy()
     pbmc_dense.X = pbmc_dense.X.toarray()
 
-    sc.pp.highly_variable_genes(pbmc, n_top_genes=1000, flavor="seurat_v3")
-    sc.pp.highly_variable_genes(pbmc_dense, n_top_genes=1000, flavor="seurat_v3")
+    sc.pp.highly_variable_genes(pbmc, n_top_genes=1000, flavor="seurat_v3_paper")
+    sc.pp.highly_variable_genes(pbmc_dense, n_top_genes=1000, flavor="seurat_v3_paper")
 
     np.testing.assert_allclose(
         seurat_hvg_info["variance"],
@@ -398,7 +398,7 @@ def test_highly_variable_genes_compare_to_seurat_v3():
     seurat_v3_hvg = sc.pp.highly_variable_genes(
         pbmc,
         n_top_genes=2000,
-        flavor="seurat_v3",
+        flavor="seurat_v3_paper",
         batch_key="dummy_tech",
         inplace=False,
     )
@@ -433,14 +433,24 @@ def test_highly_variable_genes_compare_to_seurat_v3():
 
 
 @needs.skmisc
+def test_highly_variable_genes_seurat_v3_deprecation_warning():
+    pbmc = pbmc3k()
+    with pytest.warns(
+        FutureWarning,
+        match="The name flavor='seurat_v3' is deprecated, set to flavor='seurat_v3_scanpy_legacy'. Please pass this explicitly if you want to use this scanpy behaviour.",
+    ):
+        sc.pp.highly_variable_genes(pbmc, flavor="seurat_v3")
+
+
+@needs.skmisc
 def test_highly_variable_genes_seurat_v3_warning():
     pbmc = pbmc3k()[:200].copy()
     sc.pp.log1p(pbmc)
     with pytest.warns(
         UserWarning,
-        match="`flavor='seurat_v3'` expects raw count data, but non-integers were found.",
+        match="`flavor='seurat_v3_paper'` expects raw count data, but non-integers were found.",
     ):
-        sc.pp.highly_variable_genes(pbmc, flavor="seurat_v3")
+        sc.pp.highly_variable_genes(pbmc, flavor="seurat_v3_paper")
 
 
 def test_filter_genes_dispersion_compare_to_seurat():
@@ -556,7 +566,11 @@ def test_seurat_v3_mean_var_output_with_batchkey():
     true_var = np.var(pbmc.X.toarray(), axis=0, dtype=np.float64, ddof=1)
 
     result_df = sc.pp.highly_variable_genes(
-        pbmc, batch_key="batch", flavor="seurat_v3", n_top_genes=4000, inplace=False
+        pbmc,
+        batch_key="batch",
+        flavor="seurat_v3_paper",
+        n_top_genes=4000,
+        inplace=False,
     )
     np.testing.assert_allclose(true_mean, result_df["means"], rtol=2e-05, atol=2e-05)
     np.testing.assert_allclose(true_var, result_df["variances"], rtol=2e-05, atol=2e-05)
