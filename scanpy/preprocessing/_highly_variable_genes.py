@@ -21,7 +21,7 @@ from ._utils import _get_mean_var
 def _highly_variable_genes_seurat_v3(
     adata: AnnData,
     *,
-    flavor: str = "seurat_v3",
+    flavor: str = "seurat_v3_scanpy_legacy",
     layer: str | None = None,
     n_top_genes: int = 2000,
     batch_key: str | None = None,
