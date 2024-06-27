@@ -1,15 +1,18 @@
 """Images for plot functions"""
+
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from typing import Any
+
     from sphinx.application import Sphinx
     from sphinx.ext.autodoc import Options
 
 
-def insert_function_images(
+def insert_function_images(  # noqa: PLR0917
     app: Sphinx, what: str, name: str, obj: Any, options: Options, lines: list[str]
 ):
     path = app.config.api_dir / f"{name}.png"
